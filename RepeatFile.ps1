@@ -10,6 +10,5 @@ if (Test-Path $outputFileName) { Remove-Item $outputFileName }
 
 $content = Get-Content $inputFile
 For ($i=0; $i -lt $repeatCount; $i++) {
-    $i
     $content | Out-File $outputFileName -Append -Encoding "UTF8"
 }
