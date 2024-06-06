@@ -1,8 +1,8 @@
 param (
-    [Parameter(mandatory = $true)] $inputFilePath,
-    $sampleLineCount = 1,
-    $outputFilePath,
-    [switch] $preserveFirstLine
+    [Alias("i")] [Parameter(mandatory = $true)] $inputFilePath,
+    [Alias("c")] $sampleLineCount = 1,
+    [Alias("o")] $outputFilePath,
+    [Alias("p")] [switch] $preserveFirstLine
 )
 
 Function Add-SuffixToFileName($filePath, $suffix) {
