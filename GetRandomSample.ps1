@@ -11,58 +11,46 @@ Function Add-SuffixToFileName($filePath, $suffix) {
     [IO.Path]::GetExtension($filePath)
 }
 
-Function Get-TotalLineCount($filePath) {
+Function Get-SampleLinesFromFile($inputFilePath, $sampleLineCount, $preserveFirstLine) {
     $reader = [IO.File]::OpenText($inputFilePath)
     try {
-        $result = 0;
-        while (!$reader.EndOfStream) {
-            $reader.ReadLine() | Out-Null
-            $result++;
-            if ($result % 100000 -eq 0) { Write-Host "Counting line $result" }
+        if ($preserveFirstLine) {
+            $preservedFirstLine = $reader.ReadLine()
         }
+        $sampleLines = Get-RandomSampleFromReader $reader $sampleLineCount
+        return $preserveFirstLine `
+            ? ,$preservedFirstLine + $sampleLines
+            : $sampleLines
     }
-
     finally {
         $reader.Dispose();
     }
-    return $result
 }
 
-$outputFilePath ??= Add-SuffixToFileName $inputFilePath "_sample"
-
-Write-Host "Counting number of lines..."
-$totalLineCount = Get-TotalLineCount $inputFilePath
-Write-Host "Total number of lines: $totalLineCount"
-
-If ($totalLineCount -eq 0) {
-    throw "Cannot create sample from empty file"
-}
-Write-Host "Reading the file..."
-$reader = [IO.File]::OpenText($inputFilePath)
-try {
-    $writer = [IO.File]::CreateText($outputFilePath)
-    try {
-        $lineNumber = 0
-        $lineCountToSelect = $sampleLineCount + ($preserveFirstLine ? 1 : 0)
-        $random = New-Object Random
-        while (!$reader.EndOfStream -and $lineCountToSelect -gt 0) {
-            $line = $reader.ReadLine()
-            $lineCountToRead = $totalLineCount - $lineNumber
-            $selectionProbability = [Math]::Min($lineCountToSelect / $lineCountToRead, 1.0)
-            If ($preserveFirstLine -and $lineNumber -eq 0 `
-                    -or $random.NextSingle() -le $selectionProbability) {
-                $writer.WriteLine($line)
-                $lineCountToSelect--
-            }
-            $lineNumber++
-            if ($lineNumber % 100000 -eq 0) { Write-Host "Processing line $lineNumber" }
+Function Get-RandomSampleFromReader($reader, $sampleLineCount) {
+    $random = New-Object Random
+    $result = [PSCustomObject[]]::new($sampleLineCount)
+    $lineIndex = 0
+    while (!$reader.EndOfStream) {
+        $line = $reader.ReadLine()
+        $randomIndex = $random.Next($lineIndex + 1)
+        if ($randomIndex -lt $sampleLineCount) {
+            $replacedIndex = $lineIndex -lt $sampleLineCount ? $lineIndex : $randomIndex
+            $result[$replacedIndex] = @{ Index = $lineIndex; Line = $line }
+        }
+        $lineIndex++
+        if ($lineIndex % 100000 -eq 0) {
+            Write-Host "Processed $lineIndex lines"
         }
     }
-    finally {
-        $writer.Dispose();
-    }
+    $resultLength = [Math]::Min($sampleLineCount, $lineIndex)
+    return $result[0 .. ($resultLength - 1)]
+        | Sort-Object -Property Index
+        | Select-Object -ExpandProperty Line
 }
-finally {
-    $reader.Dispose();
-}
-Write-Host "Samle file with $sampleLineCount lines is successfully created"
+
+$sampleLines = Get-SampleLinesFromFile $inputFilePath $sampleLineCount $preserveFirstLine
+$outputFilePath ??= Add-SuffixToFileName $inputFilePath "_sample"
+Write-Host "Writing result to output file $outputFilePath..."
+[IO.File]::WriteAllLines($outputFilePath, $sampleLines)
+Write-Host "Sample file with $($sampleLines.Count) lines is successfully created"
